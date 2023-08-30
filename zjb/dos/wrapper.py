@@ -38,7 +38,7 @@ def _dumps(value: Any, to_ref: Callable[[Data], DataRef]) -> Any:
     if isinstance(value, list):
         return [_dumps(v, to_ref) for v in value]
     if isinstance(value, dict):
-        return {k: _dumps(v, to_ref) for k, v in value.items()}
+        return {_dumps(k, to_ref): _dumps(v, to_ref) for k, v in value.items()}
     if isinstance(value, set):
         return {_dumps(v, to_ref) for v in value}
     if isinstance(value, frozenset):
