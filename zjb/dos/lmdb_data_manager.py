@@ -2,15 +2,13 @@ import logging
 import os
 from contextlib import contextmanager
 from enum import Enum
-from pickle import dumps, loads
 from typing import Any, NamedTuple
 
 import lmdb
 from traits.has_traits import HasRequiredTraits
 from traits.trait_types import Directory
 
-from zjb.dos.data import Data
-
+from .data import Data
 from .data_manager import DataManager
 
 logger = logging.getLogger(__name__)
@@ -53,17 +51,17 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
 
     def _bind(self, data: Data):
         data_key = data._gid.bytes
-        items = [_Item(data_key, dumps(type(data)), _DB.INDEX)]
+        items = [_Item(data_key, self._dumps(type(data)), _DB.INDEX)]
         for name in data.store_traits:
             value = getattr(data, name)
             items.append(_Item(
-                data_key+name.encode(), dumps(value), _DB.TRAIT
+                data_key+name.encode(), self._dumps(value), _DB.TRAIT
             ))
         self._put(*items)
 
     def _set_data_trait(self, data: Data, name: str, value):
         key = data._gid.bytes + name.encode()
-        self._put(_Item(key, dumps(value), _DB.TRAIT))
+        self._put(_Item(key, self._dumps(value), _DB.TRAIT))
 
     def _get_data_trait(self, data: Data, name: str) -> Any:
         key = data._gid.bytes + name.encode()
@@ -71,7 +69,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
             buffer = txn.get(key, db=self._dbs[_DB.TRAIT])
         if not buffer:
             raise ValueError("`%s` of %s not in %s" % (name, data, self))
-        return loads(buffer)
+        return self._loads(buffer)  # type: ignore
 
     """LMDB相关函数"""
 
@@ -86,7 +84,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
         with self._meta_env.begin(write=True) as txn:
             # 从META_DB获取DATA_MAP_SIZE
             map_size = txn.get(DATA_MAP_SIZE, DEFAULT_DATA_MAP_SIZE)
-            self._data_map_size = int.from_bytes(map_size)
+            self._data_map_size = int.from_bytes(map_size)  # type: ignore
 
         del self._env
         self._env = lmdb.Environment(
