@@ -50,12 +50,43 @@ trait_parametrize = mark.parametrize('trait', [
     ('test_complex', 1.+1.j),
     ('test_str', 'Nature'),
     ('test_bool', True),
+
     ('test_tuple', ('apple', 'banana', 'orange')),
     ('test_list', ['apple', 'banana', 'orange']),
     ('test_dict', {'apple': 10, 'banana': 8.8, 'orange': None}),
     ('test_set', {'apple', 'banana', 'orange'}),
     ('test_frozenset', frozenset(['apple', 'banana', 'orange'])),
-    ('test_data', _TestData(test_str='Nature', test_int=1111))
+
+    ('test_data', _TestData(test_str='Nature', test_int=1111)),
+
+    ('test_nested_tuple', ((1, 2), (3, 4))),
+    ('test_nested_list', [[1, 2], [3, 4]]),
+    ('test_nested_dict', {'a': {'a': 1}, 'b': {'b', 1}}),
+    ('test_compound_tuple', (
+        1, 'a', (1, 2), [1, 2], {1, 2}, {'a': 1})),
+    ('test_compound_list', [
+        1, 'a', (1, 2), [1, 2], {1, 2}, {'a': 1}]),
+    ('test_compound_dict', {
+        'int': 1, 'str': 'a', 'tuple': (1, 2), 'list': [1, 2],
+        'set': {1, 2}, 'dict': {'a': 1}
+    }),
+
+
+    ('test_data_tuple', (_TestData(test_str='Nature', test_int=1111),)),
+    ('test_data_in_list', [_TestData(test_str='Nature', test_int=1111)]),
+    ('test_data_in_dict', {
+        'data': _TestData(test_str='Nature', test_int=1111)
+    }),
+    ('test_data_in_dict_key', {
+        _TestData(test_str='Nature', test_int=1111): 1
+    }),
+    ('test_data_in_set', {_TestData(test_str='Nature', test_int=1111)}),
+    ('test_data_in_frozenset', frozenset(
+        [_TestData(test_str='Nature', test_int=1111)])),
+
+    ('test_data_in_data', _TestData(
+        test_data=_TestData(test_str='Nature', test_int=1111))),
+
 ])
 
 performance_parametrize = mark.parametrize('trait', [
