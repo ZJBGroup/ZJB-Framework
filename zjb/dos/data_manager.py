@@ -1,7 +1,9 @@
 from abc import abstractmethod
 from typing import Any
+from weakref import WeakValueDictionary
 
 from traits.has_traits import ABCMetaHasTraits, HasPrivateTraits
+from ulid import ULID
 
 from .data import Data
 from .wrapper import DataRef, dumps, loads
@@ -10,11 +12,20 @@ from .wrapper import DataRef, dumps, loads
 class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     """数据管理器,提供统一的数据库接口"""
 
+    _refs: WeakValueDictionary[ULID, Data]
+
+    def __init__(self, **traits):
+        super().__init__(**traits)
+        self._refs = WeakValueDictionary()
+
     def bind(self, data: Data):
         """将数据持久化并绑定到当前数据管理器"""
         if data._manager:
             raise ValueError("data must be unbound")
+
         self._bind(data)
+
+        self._refs[data._gid] = data
         data._manager = self
 
     @abstractmethod
@@ -47,4 +58,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
 
     def _to_data(self, ref: DataRef) -> Data:
         """解析引用"""
-        return ref.type(ref.gid, self)
+        value = self._refs.get(ref.gid, None)
+        if not value:
+            value = self._refs[ref.gid] = ref.type(ref.gid, self)
+        return value
