@@ -38,3 +38,15 @@ class TestDataInterface:
         for name, value in traits.items():
             dm._set_data_trait(data, name, value)
             assert getattr(data, name) == value
+
+    def test_unbind(self):
+        """测试解绑定"""
+
+        dm = DictDataManager()
+        data = _TestData(manager=dm, test_anything="anything")
+
+        assert data._manager is dm
+
+        data.unbind()
+
+        assert data._manager is None

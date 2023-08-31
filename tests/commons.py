@@ -3,6 +3,7 @@ from typing import Any
 from pytest import mark
 from traits.trait_types import Any as TraitAny
 from traits.trait_types import Bytes, Dict
+from ulid import ULID
 
 from zjb.dos.data import Data
 from zjb.dos.data_manager import DataManager, PackageDict
@@ -23,6 +24,16 @@ class DictDataManager(DataManager):
         for _, (_, _, traits) in packages.items():
             for key, value in traits:
                 self.dict[key] = value
+
+    def _delete(self, gid: ULID):
+        key_prefix = gid.bytes
+        keys = [
+            key
+            for key in self.dict.keys()
+            if key[:16] == key_prefix
+        ]
+        for key in keys:
+            del self.dict[key]
 
 
 class _TestData(Data):
