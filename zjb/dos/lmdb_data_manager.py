@@ -9,7 +9,7 @@ from traits.has_traits import HasRequiredTraits
 from traits.trait_types import Directory
 
 from .data import Data
-from .data_manager import DataManager
+from .data_manager import DataManager, DataRef, Package, PackageDict
 
 logger = logging.getLogger(__name__)
 
@@ -47,33 +47,31 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
     path = Directory(exists=True, required=True)
 
     def _path_changed(self, _):
-        self._reset_env()
+        self.__reset_env()
 
-    def _bind(self, data: Data):
-        data_key = data._gid.bytes
-        items = [_Item(data_key, self._dumps(type(data)), _DB.INDEX)]
-        for name in data.store_traits:
-            value = getattr(data, name)
-            items.append(_Item(
-                data_key+name.encode(), self._dumps(value), _DB.TRAIT
-            ))
-        self._put(*items)
+    def _get(self, key: bytes):
+        with self.__begin() as txn:
+            return txn.get(key, db=self._dbs[_DB.TRAIT])
 
-    def _set_data_trait(self, data: Data, name: str, value):
-        key = data._gid.bytes + name.encode()
-        self._put(_Item(key, self._dumps(value), _DB.TRAIT))
+    def _put(self, packages):
+        items = self.__packages2items(packages)
+        self.__put(*items)
 
-    def _get_data_trait(self, data: Data, name: str) -> Any:
-        key = data._gid.bytes + name.encode()
-        with self._begin() as txn:
-            buffer = txn.get(key, db=self._dbs[_DB.TRAIT])
-        if not buffer:
-            raise ValueError("`%s` of %s not in %s" % (name, data, self))
-        return self._loads(buffer)  # type: ignore
+    def __packages2items(self, packages: PackageDict):
+        items = []
+
+        for _, (_, _, traits) in packages.items():
+            for key, value in traits:
+                db = _DB.INDEX if key == b'type' else _DB.TRAIT
+                items.append(_Item(
+                    key, value, db
+                ))
+
+        return items
 
     """LMDB相关函数"""
 
-    def _reset_env(self):
+    def __reset_env(self):
         if not self._meta_env:
             self._meta_env = lmdb.Environment(
                 os.path.join(self.path, META_ENV),
@@ -99,7 +97,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
         } | {None: None}
 
     @contextmanager
-    def _begin(self, db=None, parent=None, write=False, buffers=False):
+    def __begin(self, db=None, parent=None, write=False, buffers=False):
         # 本函数用来处理由于其他进程扩容数据库导致的MapResizedError
         # 本函数捕获env.begin()时发生的MapResizedError, 然后在异常处理中重启环境
         # 本函数的关键在于使用上下文管理器封装保持了Transaction的上下文管理器行为
@@ -112,12 +110,12 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
             except lmdb.MapResizedError:
                 logger.debug('Map resized when create new txn, old map_size: %.4f MB',
                              self._env.info()['map_size'] / 1024 ** 2)
-                self._reset_env()
+                self.__reset_env()
                 logger.debug('Restart db_env, new map_size: %.4f MB',
                              self._env.info()['map_size'] / 1024 ** 2)
             except lmdb.BadRslotError:
                 logger.debug('BadRslotError! Try to restart env!')
-                self._reset_env()
+                self.__reset_env()
         try:
             yield txn
         except:
@@ -125,7 +123,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
             raise
         txn.commit()
 
-    def _put(self, *items: _Item, txn=None):
+    def __put(self, *items: _Item, txn=None):
         # 本函数主要用来处理由于新增数据超出数据库map_size导致的MapFullError
         # 同时本函数支持同时提交多个键值对(在一个事务内)
         # 本函数捕获MapFullError, 在异常处理时扩容map_size然后重新调用本函数进行提交
@@ -134,7 +132,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
         # see: https://bugs.openldap.org/show_bug.cgi?id=9397
         # 但本函数中的处理实现了在不同写txn进程间同步map_size
         try:
-            with self._begin(parent=txn, write=True) as _txn:
+            with self.__begin(parent=txn, write=True) as _txn:
                 for key, value, _db in items:
                     _txn.put(key, value, db=self._dbs[_db])
         except lmdb.MapFullError:
@@ -152,4 +150,4 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
             logger.debug('New map_size: %.4f MB',
                          self._env.info()['map_size'] / 1024 ** 2)
             # 再次尝试put
-            self._put(*items, txn=txn)
+            self.__put(*items, txn=txn)
