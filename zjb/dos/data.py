@@ -23,7 +23,8 @@ class Data(HasPrivateTraits, HasRequiredTraits):
 
         if gid:  # gid不为None表示管理器构建的数据
             self._gid = gid
-            assert manager is not None, "init data with gid must have manager"
+            if not manager:
+                raise ValueError("Can not init data with gid but no manager")
             self._manager = manager
             return
 
@@ -31,6 +32,8 @@ class Data(HasPrivateTraits, HasRequiredTraits):
         self._gid = ulid.new()
         if manager:
             manager.bind(self)
+        else:
+            self._manager = None
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
@@ -51,3 +54,12 @@ class Data(HasPrivateTraits, HasRequiredTraits):
             return super().__getattribute__(name)
 
         return self._manager._get_data_trait(self, name)
+
+    def clone_traits(self, traits=None, memo=None, copy=None, **metadata):
+        cloned = super().clone_traits(traits, memo, copy, **metadata)
+        cloned._gid = ulid.new()
+        return cloned
+
+    def unbind(self):
+        if self._manager:
+            self._manager.unbind(self)
