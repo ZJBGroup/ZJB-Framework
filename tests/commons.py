@@ -2,10 +2,10 @@ from typing import Any
 
 from pytest import mark
 from traits.trait_types import Any as TraitAny
-from traits.trait_types import Dict, Str
+from traits.trait_types import Bytes, Dict
 
 from zjb.dos.data import Data
-from zjb.dos.data_manager import DataManager
+from zjb.dos.data_manager import DataManager, PackageDict
 
 TraitTuple = tuple[str, Any]
 TraitsDict = dict[str, Any]
@@ -14,22 +14,33 @@ TraitsDict = dict[str, Any]
 class DictDataManager(DataManager):
     """用于测试数据接口的简单数据管理器"""
 
-    dict = Dict(Str)
+    dict = Dict(Bytes, Bytes)
 
-    def _bind(self, data: Data):
-        for name in data.store_traits:
-            self._set_data_trait(data, name, getattr(data, name))
+    def _get(self, key: bytes) -> "bytes | None":
+        return self.dict.get(key)
 
-    def _get_data_trait(self, data: Data, name: str) -> Any:
-        return self.dict[data._gid.str + name]
-
-    def _set_data_trait(self, data: Data, name: str, value):
-        self.dict[data._gid.str + name] = value
+    def _put(self, packages: PackageDict):
+        for _, (_, _, traits) in packages.items():
+            for key, value in traits:
+                self.dict[key] = value
 
 
 class _TestData(Data):
 
     test_ = TraitAny()
+
+
+def create_self_reference_data():
+    data = _TestData(test_self=None)
+    data.test_self = data
+    return data
+
+
+def create_circular_reference_data():
+    a = _TestData(test_b=None)
+    b = _TestData(test_a=a)
+    a.test_b = b
+    return a
 
 
 traits_parametrize = mark.parametrize('traits', [
@@ -87,6 +98,8 @@ trait_parametrize = mark.parametrize('trait', [
     ('test_data_in_data', _TestData(
         test_data=_TestData(test_str='Nature', test_int=1111))),
 
+    ('test_self_reference_data', create_self_reference_data()),
+    ('test_circular_reference_data', create_circular_reference_data()),
 ])
 
 performance_parametrize = mark.parametrize('trait', [
