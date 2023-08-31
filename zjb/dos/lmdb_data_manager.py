@@ -2,14 +2,14 @@ import logging
 import os
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import lmdb
 from traits.has_traits import HasRequiredTraits
 from traits.trait_types import Directory
+from ulid import ULID
 
-from .data import Data
-from .data_manager import DataManager, DataRef, Package, PackageDict
+from .data_manager import DataManager, PackageDict
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,15 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
     def _put(self, packages):
         items = self.__packages2items(packages)
         self.__put(*items)
+
+    def _delete(self, gid: ULID):
+        key_prefix = gid.bytes
+        with self.__begin(write=True, buffers=False) as txn:
+            with txn.cursor(db=self._dbs[_DB.TRAIT]) as cursor:
+                cursor.set_range(key_prefix)
+                while cursor.key()[:16] == key_prefix:
+                    cursor.delete()
+            txn.delete(key_prefix, db=self._dbs[_DB.INDEX])
 
     def __packages2items(self, packages: PackageDict):
         items = []

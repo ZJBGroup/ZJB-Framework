@@ -56,6 +56,17 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         self._put(packages)
         self._finish(packages)
 
+    def unbind(self, data: Data):
+        """解除数据与数据管理器的绑定,并从数据库中删除数据"""
+        if data._manager is not self:
+            raise ValueError(
+                f"{self} can not unbind {data} that is not bound to self")
+
+        gid = data._gid
+        self._delete(gid)
+        del self._refs[gid]
+        data._manager = None
+
     @abstractmethod
     def _get(self, key: bytes) -> "bytes | None":
         """从数据库中读特定数据特征"""
@@ -63,6 +74,10 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     @abstractmethod
     def _put(self, packages: PackageDict):
         """将数据包保存到数据库"""
+
+    @abstractmethod
+    def _delete(self, gid: ULID):
+        """从数据库中删除数据"""
 
     def _get_data_trait(self, data: Data, name: str) -> Any:
         """获取数据特征"""
