@@ -2,12 +2,14 @@ import logging
 import os
 from contextlib import contextmanager
 from enum import Enum
-from typing import NamedTuple
+from typing import Iterator, NamedTuple
 
 import lmdb
 from traits.has_traits import HasRequiredTraits
 from traits.trait_types import Directory
-from ulid import ULID
+from ulid import ULID, from_bytes
+
+from zjb.dos.data_manager import DataRef
 
 from .data_manager import DataManager, PackageDict
 
@@ -65,6 +67,12 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
                 while cursor.key()[:16] == key_prefix:
                     cursor.delete()
             txn.delete(key_prefix, db=self._dbs[_DB.INDEX])
+
+    def _iter(self) -> Iterator[DataRef]:
+        with self.__begin() as txn:
+            with txn.cursor(db=self._dbs[_DB.INDEX]) as cursor:
+                for key, value in cursor:
+                    yield DataRef(from_bytes(key), self._loads(value))
 
     def __packages2items(self, packages: PackageDict):
         items = []

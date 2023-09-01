@@ -48,6 +48,18 @@ class _TestDataManager:
                 dm._get_data_trait(data, name)
         assert data._manager is None
 
+    @traits_parametrize
+    def test_iter(self, dm: DataManager, traits: TraitsDict):
+        """测试数据管理器的iter接口"""
+        data = [
+            _TestData(manager=dm, **{name: deepcopy(value)})
+            for name, value in traits.items()
+        ]
+
+        for _data in dm.iter():
+            data.remove(_data)
+        assert data == []
+
     @trait_parametrize
     def test_set_get_data_trait(self, dm: DataManager, trait: TraitTuple):
         """测试数据管理器的_set_data_trait与_get_data_trait接口

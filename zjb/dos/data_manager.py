@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from pickle import dumps, loads
-from typing import Any, NamedTuple
+from typing import Any, Iterator, NamedTuple
 from weakref import WeakValueDictionary
 
 from traits.has_traits import ABCMetaHasTraits, HasPrivateTraits
@@ -67,6 +67,11 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         del self._refs[gid]
         data._manager = None
 
+    def iter(self) -> Iterator[Data]:
+        """遍历数据管理器中的所有数据"""
+        for ref in self._iter():
+            yield self._unpack_ref(ref)
+
     @abstractmethod
     def _get(self, key: bytes) -> "bytes | None":
         """从数据库中读特定数据特征"""
@@ -78,6 +83,10 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     @abstractmethod
     def _delete(self, gid: ULID):
         """从数据库中删除数据"""
+
+    @abstractmethod
+    def _iter(self) -> Iterator[DataRef]:
+        """遍历数据管理器中的所有数据(引用)"""
 
     def _get_data_trait(self, data: Data, name: str) -> Any:
         """获取数据特征"""
@@ -171,15 +180,18 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         # 其他
         return obj
 
+    def _unpack_ref(self, ref: DataRef) -> Data:
+        gid, cls = ref
+        data = self._refs.get(gid, None)
+        if not data:
+            data = self._refs[gid] = cls(gid, self)
+        return data
+
     def _unpack(self, obj):
         """解包数据"""
         # 数据引用=>数据
         if isinstance(obj, DataRef):
-            gid, cls = obj
-            data = self._refs.get(gid, None)
-            if not data:
-                data = self._refs[gid] = cls(gid, self)
-            return data
+            return self._unpack_ref(obj)
 
         # 容器类型
         if isinstance(obj, tuple):

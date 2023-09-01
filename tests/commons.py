@@ -1,12 +1,13 @@
-from typing import Any
+from typing import Any, Iterator
 
+import ulid
 from pytest import mark
 from traits.trait_types import Any as TraitAny
 from traits.trait_types import Bytes, Dict
 from ulid import ULID
 
 from zjb.dos.data import Data
-from zjb.dos.data_manager import DataManager, PackageDict
+from zjb.dos.data_manager import DataManager, DataRef, PackageDict
 
 TraitTuple = tuple[str, Any]
 TraitsDict = dict[str, Any]
@@ -34,6 +35,11 @@ class DictDataManager(DataManager):
         ]
         for key in keys:
             del self.dict[key]
+
+    def _iter(self) -> Iterator[DataRef]:
+        for key, value in self.dict.items():
+            if len(key) == 16:
+                yield DataRef(ulid.from_bytes(key), self._loads(value))
 
 
 class _TestData(Data):
