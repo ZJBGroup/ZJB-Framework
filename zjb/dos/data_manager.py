@@ -138,8 +138,8 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
 
         # 递归打包未管理的数据的特征
         if not manager:
-            traits.append(TraitItem(b'type', self._dumps(ref.type)))
             key_prefix = gid.bytes
+            traits.append(TraitItem(key_prefix, self._dumps(ref.type)))
             traits += [
                 TraitItem(
                     key_prefix + name.encode(),

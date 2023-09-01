@@ -71,7 +71,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
 
         for _, (_, _, traits) in packages.items():
             for key, value in traits:
-                db = _DB.INDEX if key == b'type' else _DB.TRAIT
+                db = _DB.INDEX if len(key) == 16 else _DB.TRAIT
                 items.append(_Item(
                     key, value, db
                 ))
