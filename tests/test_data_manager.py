@@ -1,3 +1,4 @@
+import random
 from copy import deepcopy
 from tempfile import TemporaryDirectory
 
@@ -60,6 +61,33 @@ class _TestDataManager:
             data.remove(_data)
         assert data == []
 
+    def test_allocate_lock(self, dm: DataManager):
+        """测试数据管理器的allocate_lock接口"""
+        data = _TestData()
+
+        # 数据锁
+        lock1 = dm.allocate_lock(data)
+        lock2 = dm.allocate_lock(data)
+        with lock1:
+            # 互斥
+            assert lock2.acquire(False) == False
+            # 可重入
+            assert lock1.acquire(False)
+            # 安全
+            with raises(RuntimeError):
+                lock2.release()
+        # 特征锁
+        lock1 = dm.allocate_lock(data, 'test_lock')
+        lock2 = dm.allocate_lock(data, 'test_lock')
+        with lock1:
+            # 互斥
+            assert lock2.acquire(False) == False
+            # 可重入
+            assert lock1.acquire(False)
+            # 安全
+            with raises(RuntimeError):
+                lock2.release()
+
     @trait_parametrize
     def test_set_get_data_trait(self, dm: DataManager, trait: TraitTuple):
         """测试数据管理器的_set_data_trait与_get_data_trait接口
@@ -87,6 +115,34 @@ class _TestDataManager:
         dm._delete(data._gid)
         with raises(ValueError):
             dm._get_data_trait(data, name)
+
+    def test_lock_unlock(self, dm: DataManager):
+        """测试数据管理器的_lock接口和_unlock接口"""
+        key = random.randbytes(16)
+        secret = random.randbytes(16)
+        secret2 = random.randbytes(16)
+
+        # 锁定
+        assert dm._lock(key, secret)
+        # 互斥
+        assert dm._lock(key, secret2) == False
+        # 可重入
+        assert dm._lock(key, secret)
+        # 安全
+        with raises(RuntimeError):
+            assert dm._unlock(key, secret2)
+        # 解锁
+        dm._unlock(key, secret)
+        # 未锁定不可解锁
+        with raises(RuntimeError):
+            assert dm._unlock(key, secret)
+        # 锁定2
+        assert dm._lock(key, secret2)
+        # 解锁2
+        dm._unlock(key, secret2)
+        # 未锁定不可解锁
+        with raises(RuntimeError):
+            assert dm._unlock(key, secret2)
 
 
 class TestLMDBDataManager(_TestDataManager):

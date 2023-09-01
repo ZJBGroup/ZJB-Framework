@@ -1,12 +1,18 @@
+import random
 from abc import abstractmethod
 from pickle import dumps, loads
-from typing import Any, Iterator, NamedTuple
+from typing import TYPE_CHECKING, Any, Iterator, NamedTuple
 from weakref import WeakValueDictionary
 
-from traits.has_traits import ABCMetaHasTraits, HasPrivateTraits
+from traits.has_traits import (ABCMetaHasTraits, HasPrivateTraits,
+                               HasRequiredTraits, Property, cached_property)
+from traits.trait_types import Bool, Bytes, Instance, Str
 from ulid import ULID
 
 from .data import Data
+
+if TYPE_CHECKING:
+    from ._type_hints import Instance
 
 
 class DataRef(NamedTuple):
@@ -72,6 +78,11 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         for ref in self._iter():
             yield self._unpack_ref(ref)
 
+    def allocate_lock(self, data: Data, name: "str | None" = None):
+        if name:
+            return TraitLock(data=data, name=name, manager=self)
+        return DataLock(data=data, manager=self)
+
     @abstractmethod
     def _get(self, key: bytes) -> "bytes | None":
         """从数据库中读特定数据特征"""
@@ -87,6 +98,20 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     @abstractmethod
     def _iter(self) -> Iterator[DataRef]:
         """遍历数据管理器中的所有数据(引用)"""
+
+    def _lock(self, key: bytes, secret: bytes) -> bool:
+        """使用secret锁定key
+        如果提供的key未锁定或已锁定且提供了正确的secret(重入), 
+        返回True表示成功锁定key, 否则返回False表示锁定失败
+        """
+        raise NotImplementedError
+
+    def _unlock(self, key: bytes, secret: bytes):
+        """使用secret解锁key
+        如果提供的key已锁定且secret一致,_unlock正常退出
+        否则抛出异常
+        """
+        raise NotImplementedError
 
     def _get_data_trait(self, data: Data, name: str) -> Any:
         """获取数据特征"""
@@ -207,3 +232,58 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
 
         # 其他
         return obj
+
+
+class _Lock(HasPrivateTraits, HasRequiredTraits):
+
+    manager = Instance(DataManager, required=True)
+
+    key = Bytes(required=True)
+
+    secret: bytes = Property()
+
+    locked = Bool()
+
+    @cached_property
+    def _get_secret(self):
+        return random.randbytes(16)
+
+    def acquire(self, block=True):
+        if self.locked:
+            return True
+        while True:
+            self.locked = locked = self.manager._lock(self.key, self.secret)
+            if locked or not block:
+                break
+        return locked
+
+    __enter__ = acquire
+
+    def release(self):
+        if not self.locked:
+            raise RuntimeError("cannot release un-acquired lock")
+        self.manager._unlock(self.key, self.secret)
+        self.locked = False
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+
+class DataLock(_Lock):
+
+    key: bytes = Property()
+
+    data = Instance(Data, required=True)
+
+    @cached_property
+    def _get_key(self):
+        return self.data._gid.bytes
+
+
+class TraitLock(DataLock):
+
+    name = Str(require=True)
+
+    @cached_property
+    def _get_key(self):
+        return self.data._gid.bytes + self.name.encode()

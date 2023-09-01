@@ -23,6 +23,8 @@ DATA_MAP_SIZE = b'data_map_size'
 DEFAULT_DATA_MAP_SIZE = b'\x10\x00\x00'
 DATA_MAP_SIZE_LENGTH = 8
 MAX_DATA_MAP_SIZE_INCREASE = 1024 ** 3
+LOCK_ENV = 'lock.mdb'
+LOCK_MAP_SIZE = 1024 ** 2
 
 
 class _DB(Enum):
@@ -74,6 +76,23 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
                 for key, value in cursor:
                     yield DataRef(from_bytes(key), self._loads(value))
 
+    def _lock(self, key: bytes, secret: bytes) -> bool:
+        with self._lock_env.begin(write=True) as txn:
+            _secret = txn.get(key)
+            if _secret:
+                return secret == _secret
+            txn.put(key, secret)
+            return True
+
+    def _unlock(self, key: bytes, secret: bytes):
+        with self._lock_env.begin(write=True) as txn:
+            _secret = txn.get(key)
+            if not _secret:
+                raise RuntimeError("cannot unlock free key")
+            if _secret != secret:
+                raise RuntimeError("cannot unlock key with wrong secret")
+            txn.delete(key)
+
     def __packages2items(self, packages: PackageDict):
         items = []
 
@@ -107,6 +126,12 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
             self._data_map_size, False,
             max_dbs=len(_DB)
         )
+
+        if not self._lock_env:
+            self._lock_env = lmdb.Environment(
+                os.path.join(self.path, LOCK_ENV),
+                LOCK_MAP_SIZE, False
+            )
 
         self._dbs = {
             db: self._env.open_db(db.value)

@@ -58,6 +58,23 @@ class _TestDataManagerPerformance:
         logging.info(
             f"call `{dm_name}._get_data_trait({name})` {number} times in {costs:.3}s")
 
+    def test_lock_performance(self, dm: DataManager):
+        data = _TestData()
+        data_lock = dm.allocate_lock(data)
+
+        dm_name = dm.__class__.__name__
+
+        timer = Timer('with data_lock: pass', globals=locals())
+        number, cost = timer.autorange()
+        logging.info(
+            f"call `with {dm_name}.alocate_lock` {number} times in {cost:.3}s")
+
+        stmt = 'dm._lock(data_lock.key, data_lock.secret)\ndm._unlock(data_lock.key, data_lock.secret)'
+        timer = Timer(stmt, globals=locals())
+        number, cost = timer.autorange()
+        logging.info(
+            f"call `{dm_name}._lock` and `{dm_name}._unlock` {number} times in {cost:.3}s")
+
 
 class TestLMDBDataManagerPerformance(_TestDataManagerPerformance):
 
