@@ -17,14 +17,17 @@ class Data(HasPrivateTraits, HasRequiredTraits):
     store_traits = Set(Str, transient=True)
 
     def __init__(self, gid: ulid.ULID | None = None, manager: "DataManager | None" = None, **traits):
-        self.store_traits = set()
-        super().__init__(**traits)
-        self.store_traits = set(self.trait_names(transient=is_not_true))
-
         if gid:  # gid不为None表示管理器构建的数据
-            self._gid = gid
             if not manager:
                 raise ValueError("Can not init data with gid but no manager")
+            # 跳过required特征检查
+            HasPrivateTraits.__init__(self, **traits)
+        else:
+            super().__init__(**traits)
+        self.store_traits = set(self.trait_names(transient=is_not_true))
+
+        if gid:
+            self._gid = gid
             self._manager = manager
             return
 
