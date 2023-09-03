@@ -58,6 +58,17 @@ class Data(HasPrivateTraits, HasRequiredTraits):
 
         return self._manager._get_data_trait(self, name)
 
+    def __enter__(self):
+        if self._manager:
+            self._lock = self._manager.allocate_lock(self)
+            return self._lock.acquire()
+        return True
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._lock:
+            self._lock.release()
+            self._lock = None
+
     def clone_traits(self, traits=None, memo=None, copy=None, **metadata):
         cloned = super().clone_traits(traits, memo, copy, **metadata)
         cloned._gid = ulid.new()
