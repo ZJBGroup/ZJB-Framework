@@ -1,23 +1,24 @@
 import random
 from abc import abstractmethod
 from pickle import dumps, loads
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple
+from time import sleep
+from typing import Any, Generic, Iterator, NamedTuple, TypeVar
 from weakref import WeakValueDictionary
 
 from traits.has_traits import (ABCMetaHasTraits, HasPrivateTraits,
                                HasRequiredTraits, Property, cached_property)
-from traits.trait_types import Bool, Bytes, Instance, Str
+from traits.trait_types import Bool, Bytes, Str
 from ulid import ULID
 
+from .._traits.types import Instance
 from .data import Data
 
-if TYPE_CHECKING:
-    from ._type_hints import Instance
+T = TypeVar('T', bound=Data)
 
 
-class DataRef(NamedTuple):
+class DataRef(NamedTuple, Generic[T]):
     gid: ULID
-    type: type[Data]
+    type: type[T]
 
     @classmethod
     def from_data(cls, data: Data):
@@ -205,12 +206,12 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         # 其他
         return obj
 
-    def _unpack_ref(self, ref: DataRef) -> Data:
+    def _unpack_ref(self, ref: DataRef[T]) -> T:
         gid, cls = ref
         data = self._refs.get(gid, None)
         if not data:
             data = self._refs[gid] = cls(gid, self)
-        return data
+        return data  # type: ignore
 
     def _unpack(self, obj):
         """解包数据"""
@@ -255,6 +256,7 @@ class _Lock(HasPrivateTraits, HasRequiredTraits):
             self.locked = locked = self.manager._lock(self.key, self.secret)
             if locked or not block:
                 break
+            sleep(0.01)
         return locked
 
     __enter__ = acquire
