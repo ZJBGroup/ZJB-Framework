@@ -118,7 +118,8 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
         with self._meta_env.begin(write=True) as txn:
             # 从META_DB获取DATA_MAP_SIZE
             map_size = txn.get(DATA_MAP_SIZE, DEFAULT_DATA_MAP_SIZE)
-            self._data_map_size = int.from_bytes(map_size)  # type: ignore
+            self._data_map_size = int.from_bytes(
+                map_size, 'big')  # type: ignore
 
         del self._env
         self._env = lmdb.Environment(
@@ -187,7 +188,7 @@ class LMDBDataManager(DataManager, HasRequiredTraits):
                 else:
                     data_map_size *= 2
                 _txn.put(DATA_MAP_SIZE, data_map_size.to_bytes(
-                    DATA_MAP_SIZE_LENGTH))
+                    DATA_MAP_SIZE_LENGTH, 'big'))
                 self._env.set_mapsize(data_map_size)
             logger.debug('New map_size: %.4f MB',
                          self._env.info()['map_size'] / 1024 ** 2)
