@@ -27,9 +27,9 @@ sequenceDiagram
     note over DM, B: 从进程B获取属性x将从数据管理器读取,<br/>因此与进程A的初始化值相同
     DM->>B: assert point.x==0
     note over DM, B: 在进程B设置属性x将更新到数据管理器
-    B->>DM: data.x=2
+    B->>DM: point.x=2
     note over A, DM: 从进程A获取属性x将从数据管理器读取,<br/>因此与进程B新设置的值相同
-    DM->>A: assert data.x==2
+    DM->>A: assert point.x==2
 ```
 
 在任何进程中, 不需要额外调用数据库接口(被封装到`DataManager`和`Data`类), 就可以像操作内存中的数据一样赋值或读取持久化(绑定)到数据管理器的数据, 从而实现了数据在不同进程之间的同步.
