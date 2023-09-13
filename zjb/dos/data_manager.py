@@ -1,4 +1,5 @@
 import random
+import sys
 from abc import abstractmethod
 from pickle import dumps, loads
 from time import sleep
@@ -15,14 +16,24 @@ from .data import Data
 
 T = TypeVar('T', bound=Data)
 
+if sys.version_info >= (3, 9) and sys.version_info < (3, 11):
+    # Python3.9/10中NamedTuple不支持泛型
+    # see: https://github.com/python/cpython/issues/88089
+    class DataRef(NamedTuple):
+        gid: ULID
+        type: type[Data]
 
-class DataRef(NamedTuple, Generic[T]):
-    gid: ULID
-    type: type[T]
+        @classmethod
+        def from_data(cls, data: Data):
+            return cls(data._gid, type(data))
+else:
+    class DataRef(NamedTuple, Generic[T]):
+        gid: ULID
+        type: type[T]
 
-    @classmethod
-    def from_data(cls, data: Data):
-        return cls(data._gid, type(data))
+        @classmethod
+        def from_data(cls, data: Data):
+            return cls(data._gid, type(data))
 
 
 class TraitItem(NamedTuple):
