@@ -6,15 +6,20 @@ from time import sleep
 from typing import Any, Generic, Iterator, NamedTuple, TypeVar
 from weakref import WeakValueDictionary
 
-from traits.has_traits import (ABCMetaHasTraits, HasPrivateTraits,
-                               HasRequiredTraits, Property, cached_property)
-from traits.trait_types import Bool, Bytes, Str
+from traits.has_traits import (
+    ABCMetaHasTraits,
+    HasPrivateTraits,
+    HasRequiredTraits,
+    Property,
+    cached_property,
+)
+from traits.trait_types import Bool, Bytes, Dict, Str
 from ulid import ULID
 
 from .._traits.types import Instance
 from .data import Data
 
-T = TypeVar('T', bound=Data)
+T = TypeVar("T", bound=Data)
 
 if sys.version_info >= (3, 9) and sys.version_info < (3, 11):
     # Python3.9/10中NamedTuple不支持泛型
@@ -26,7 +31,9 @@ if sys.version_info >= (3, 9) and sys.version_info < (3, 11):
         @classmethod
         def from_data(cls, data: Data):
             return cls(data._gid, type(data))
+
 else:
+
     class DataRef(NamedTuple, Generic[T]):
         gid: ULID
         type: type[T]
@@ -54,15 +61,10 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     """数据管理器,提供统一的数据库接口"""
 
     # 已管理数据的弱引用
-    _refs: WeakValueDictionary[ULID, Data]
+    _refs: WeakValueDictionary[ULID, Data] = Instance(WeakValueDictionary, args=(), transient=True)  # type: ignore
 
     # 已打包或正在打包的数据
-    _packages: PackageDict
-
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        self._refs = WeakValueDictionary()
-        self._packages = {}
+    _packages: PackageDict = Dict(transient=True)  # type: ignore
 
     def bind(self, data: Data):
         """将数据持久化并绑定到当前数据管理器"""
@@ -77,8 +79,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     def unbind(self, data: Data):
         """解除数据与数据管理器的绑定,并从数据库中删除数据"""
         if data._manager is not self:
-            raise ValueError(
-                f"{self} can not unbind {data} that is not bound to self")
+            raise ValueError(f"{self} can not unbind {data} that is not bound to self")
 
         gid = data._gid
         self._delete(gid)
@@ -113,7 +114,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
 
     def _lock(self, key: bytes, secret: bytes) -> bool:
         """使用secret锁定key
-        如果提供的key未锁定或已锁定且提供了正确的secret(重入), 
+        如果提供的key未锁定或已锁定且提供了正确的secret(重入),
         返回True表示成功锁定key, 否则返回False表示锁定失败
         """
         raise NotImplementedError
@@ -138,12 +139,9 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         gid = data._gid
         ref = DataRef.from_data(data)
         traits: list[TraitItem] = []
-        packages: PackageDict = {
-            gid: Package(ref, data, traits)
-        }
+        packages: PackageDict = {gid: Package(ref, data, traits)}
         package = self._pack(value, packages)
-        traits.append(TraitItem(
-            gid.bytes + name.encode(), self._dumps(package)))
+        traits.append(TraitItem(gid.bytes + name.encode(), self._dumps(package)))
         self._put(packages)
         self._finish(packages)
 
@@ -174,8 +172,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         # 检查data是否属于其他管理器
         manager = data._manager
         if manager and manager is not self:
-            raise ValueError(
-                f"Can not pack {data} belongs to {manager} in {self}")
+            raise ValueError(f"Can not pack {data} belongs to {manager} in {self}")
 
         # 标记data正在打包
         traits: list[TraitItem] = []
@@ -189,7 +186,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
             traits += [
                 TraitItem(
                     key_prefix + name.encode(),
-                    self._dumps(self._pack(getattr(data, name), packages))
+                    self._dumps(self._pack(getattr(data, name), packages)),
                 )
                 for name in data.store_traits
             ]
@@ -208,7 +205,9 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         if isinstance(obj, list):
             return [self._pack(v, packages) for v in obj]
         if isinstance(obj, dict):
-            return {self._pack(k, packages): self._pack(v, packages) for k, v in obj.items()}
+            return {
+                self._pack(k, packages): self._pack(v, packages) for k, v in obj.items()
+            }
         if isinstance(obj, set):
             return {self._pack(v, packages) for v in obj}
         if isinstance(obj, frozenset):
@@ -247,7 +246,6 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
 
 
 class _Lock(HasPrivateTraits, HasRequiredTraits):
-
     manager = Instance(DataManager, required=True)
 
     key = Bytes(required=True)
@@ -283,7 +281,6 @@ class _Lock(HasPrivateTraits, HasRequiredTraits):
 
 
 class DataLock(_Lock):
-
     key: bytes = Property()
 
     data = Instance(Data, required=True)
@@ -294,7 +291,6 @@ class DataLock(_Lock):
 
 
 class TraitLock(DataLock):
-
     name = Str(require=True)
 
     @cached_property
