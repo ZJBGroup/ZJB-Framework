@@ -58,13 +58,13 @@ class Worker(HasPrivateTraits, HasRequiredTraits):
             self.sem.release()
         return lock
 
-    def is_idel(self) -> bool:
+    def is_idle(self) -> bool:
         if not self.sem:
             return True
-        idel = self.sem.acquire(False)
-        if idel:
+        idle = self.sem.acquire(False)
+        if idle:
             self.sem.release()
-        return idel
+        return idle
 
     def _process_default(self):
         self.sem = Semaphore(1)
