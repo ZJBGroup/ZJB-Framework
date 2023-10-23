@@ -1,10 +1,8 @@
 from enum import IntEnum
 
-from traits.trait_types import Any, Dict
-from traits.trait_types import Enum as TraitEnum
-from traits.trait_types import Str, Tuple
+from traits.trait_types import Dict, Str, Tuple
 
-from .._traits.types import Callable, OptionalInstance
+from .._traits.types import OptionalInstance, TraitAny, TraitCallable, TraitEnum
 from ..dos.data import Data
 
 
@@ -17,14 +15,13 @@ class JobState(IntEnum):
 
 
 class Job(Data):
-
-    func = Callable(required=True)
+    func = TraitCallable(required=True)
 
     args = Tuple()
 
-    kwargs = Dict(Str, Any)
+    kwargs = Dict(Str, TraitAny)
 
-    out = Any()
+    out = TraitAny()
 
     err = OptionalInstance(Exception)
 
