@@ -11,7 +11,7 @@ T = TypeVar("T")
 OptionalInstance = _Instance  # type: ignore
 
 
-class StrInstance(_Instance, Generic[T]):  # type: ignore
+class TypedInstance(_Instance, Generic[T]):  # type: ignore
     ...
 
 
@@ -46,10 +46,10 @@ if TYPE_CHECKING:
         ):
             ...
 
-    class StrInstance(_TraitType[T, T], Generic[T]):
+    class TypedInstance(_TraitType[T, T], Generic[T]):
         def __init__(
             self,
-            klass: str,
+            klass: Any,
             *args: Any,
             **metadata: Any,
         ):
