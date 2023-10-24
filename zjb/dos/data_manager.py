@@ -220,7 +220,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         gid, cls = ref
         data = self._refs.get(gid, None)
         if not data:
-            data = self._refs[gid] = cls(gid, self)
+            data = self._refs[gid] = cls.from_manager(self, gid)
         return data  # type: ignore
 
     def _unpack(self, obj):

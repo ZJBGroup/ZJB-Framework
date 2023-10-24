@@ -13,30 +13,23 @@ def is_not_true(value):
 
 
 class Data(HasPrivateTraits, HasRequiredTraits):
+    _manager: "DataManager | None"
 
     store_traits = Set(Str, transient=True)
 
-    def __init__(self, gid: ulid.ULID | None = None, manager: "DataManager | None" = None, **traits):
-        if gid:  # gid不为None表示管理器构建的数据
-            if not manager:
-                raise ValueError("Can not init data with gid but no manager")
-            # 跳过required特征检查
-            HasPrivateTraits.__init__(self, **traits)
-        else:
-            super().__init__(**traits)
+    def __init__(self, **traits):
+        super().__init__(**traits)
+        self._gid = ulid.new()
         self.store_traits = set(self.trait_names(transient=is_not_true))
 
-        if gid:
-            self._gid = gid
-            self._manager = manager
-            return
-
-        # gid为None表示新创建的数据
-        self._gid = ulid.new()
-        if manager:
-            manager.bind(self)
-        else:
-            self._manager = None
+    @classmethod
+    def from_manager(cls, manager: "DataManager", gid: ulid.ULID):
+        data = cls.__new__(cls)
+        HasPrivateTraits.__init__(data)
+        data._gid = gid
+        data._manager = manager
+        data.store_traits = set(data.trait_names(transient=is_not_true))
+        return data
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
@@ -50,7 +43,7 @@ class Data(HasPrivateTraits, HasRequiredTraits):
         self._manager._set_data_trait(self, name, value)
 
     def __getattribute__(self, name):
-        if name == 'store_traits' or name not in self.store_traits:
+        if name == "store_traits" or name not in self.store_traits:
             return super().__getattribute__(name)
 
         if not self._manager:

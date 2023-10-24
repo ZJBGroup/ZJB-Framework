@@ -1,5 +1,4 @@
-from tests.commons import (DictDataManager, TraitsDict, _TestData,
-                           traits_parametrize)
+from tests.commons import DictDataManager, TraitsDict, _TestData, traits_parametrize
 
 
 class TestDataInterface:
@@ -13,7 +12,8 @@ class TestDataInterface:
         由于为使用特征获取,该测试不受其影响
         """
         dm = DictDataManager()
-        data = _TestData(manager=dm)
+        data = _TestData()
+        dm.bind(data)
 
         # 将traits中的特征添加到store_traits
         data.store_traits |= traits.keys()
@@ -30,7 +30,8 @@ class TestDataInterface:
         由于未使用特征赋值,该测试不受其影响
         """
         dm = DictDataManager()
-        data = _TestData(manager=dm)
+        data = _TestData()
+        dm.bind(data)
 
         # 将traits中的特征添加到store_traits
         data.store_traits |= traits.keys()
@@ -43,7 +44,8 @@ class TestDataInterface:
         """测试解绑定"""
 
         dm = DictDataManager()
-        data = _TestData(manager=dm, test_anything="anything")
+        data = _TestData(test_anything="anything")
+        dm.bind(data)
 
         assert data._manager is dm
 
