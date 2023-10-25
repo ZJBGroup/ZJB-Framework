@@ -131,9 +131,11 @@ class GeneratorJob(Job[P, R]):
         with self:
             self.state = JobState.WAITTING
             self._check_and_done()
-        # 存在父作业时, 通知其该作业已完成
-        if self.parent:
-            self.parent.notify(self)
+        # FIXME: 在Data中添加接口或从外部传入参数来判断作业是否与任务管理器绑定
+        # 如果Job未提交到任务管理器则顺序执行子作业
+        if not self._manager:
+            for child in self.children:
+                child()
 
     def _handle_return(self, gen: "Generator[Job, None, Job[..., R] | R]"):
         _return = yield from gen
@@ -174,3 +176,6 @@ class GeneratorJob(Job[P, R]):
             self.state = JobState.ERROR
         else:
             self.state = JobState.DONE
+        # 存在父作业时, 通知其该作业已完成
+        if self.parent:
+            self.parent.notify(self)
