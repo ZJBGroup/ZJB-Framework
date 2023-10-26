@@ -1,5 +1,4 @@
 import random
-from copy import deepcopy
 from tempfile import TemporaryDirectory
 
 from pytest import fixture, raises
@@ -8,6 +7,7 @@ from tests.commons import (
     TraitsDict,
     TraitTuple,
     _TestData,
+    deepcopy,
     trait_parametrize,
     traits_parametrize,
 )
@@ -102,6 +102,8 @@ class _TestDataManager:
         data = _TestData()
         name, value = deepcopy(trait)
 
+        # FIXME: 这里没有(可能无法做到)测试是否所有内部数据都被正确添加到管理器
+        # 例如, 嵌套的数据没有被绑定到管理器时也能够通过验证, 不过可能需要外部提供所有包含的数据
         dm._set_data_trait(data, name, value)
         assert dm._get_data_trait(data, name) == value
 
