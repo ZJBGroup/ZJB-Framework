@@ -1,7 +1,8 @@
 from enum import IntEnum
+from functools import partial, wraps
 from reprlib import recursive_repr
 from time import sleep
-from typing import TYPE_CHECKING, Callable, Generator, Generic, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, ParamSpec, TypeVar
 
 from traits.trait_types import Dict, List, Str, Tuple
 
@@ -17,6 +18,7 @@ from ..dos.data import Data
 
 if TYPE_CHECKING:
     from .job_manager import JobManager
+
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -100,7 +102,7 @@ class JobRuntimeError(Exception):
 
 
 class GeneratorJob(Job[P, R]):
-    func: "Callable[P, Generator[Job, None, Job[..., R] | R]]"
+    func: "GenJobFuncType[P, R]"
 
     children = List(Instance(Job))
 
@@ -108,7 +110,7 @@ class GeneratorJob(Job[P, R]):
 
     def __init__(
         self,
-        func: "Callable[P, Generator[Job, None, Job[..., R] | R]]",
+        func: "GenJobFuncType[P, R]",
         *args: P.args,
         **kwargs: P.kwargs,
     ):
@@ -116,7 +118,13 @@ class GeneratorJob(Job[P, R]):
 
     def __call__(self):
         try:
-            gen = self.func(*self.args, **self.kwargs)
+            func = self.func
+            if hasattr(func, "__job_wrapped__"):  # 处理装饰过的函数
+                if hasattr(func, "__self__"):  # bound method
+                    func = partial(func.__job_wrapped__, func.__self__)
+                else:
+                    func = func.__job_wrapped__
+            gen: "GenJobGeneratorType[R]" = func(*self.args, **self.kwargs)
             for job in self._handle_return(gen):
                 # 作业已经失败则不继续执行
                 if self.state == JobState.ERROR:
@@ -137,13 +145,14 @@ class GeneratorJob(Job[P, R]):
             for child in self.children:
                 child()
 
-    def _handle_return(self, gen: "Generator[Job, None, Job[..., R] | R]"):
+    def _handle_return(self, gen: "GenJobGeneratorType[R]"):
         _return = yield from gen
         if isinstance(_return, Job):
             self._return = _return
         else:
             self.out = _return
 
+    # FIXME: Worker在子作业调用该方法时中断可能会导致父作业无法完成
     def notify(self, job: Job):
         """子作业执行完成通知, 并在该作业及所有子作业完成后执行_return作业"""
         with self:
@@ -169,6 +178,7 @@ class GeneratorJob(Job[P, R]):
         if not _return:
             self.state = JobState.DONE
             return
+
         try:
             self.out = _return.func(*_return.args, **_return.kwargs)
         except Exception as ex:
@@ -179,3 +189,79 @@ class GeneratorJob(Job[P, R]):
         # 存在父作业时, 通知其该作业已完成
         if self.parent:
             self.parent.notify(self)
+
+
+if TYPE_CHECKING:
+    from typing import Protocol, Self, overload
+
+    from .._typings import Method
+
+    O = TypeVar("O")
+    O_co = TypeVar("O_co", contravariant=True)
+    CR_co = TypeVar("CR_co", covariant=True)
+    JR_co = TypeVar("JR_co", covariant=True)
+
+    class JobWrapped(Protocol[P, CR_co, JR_co]):
+        __self__: Any  # just for type check
+
+        def __job_wrapped__(self, *args: P.args, **kwds: P.kwargs) -> JR_co:
+            ...
+
+        def __call__(self, *args: P.args, **kwds: P.kwargs) -> CR_co:
+            ...
+
+    class JobWrappedMethod(Method[O_co, P, CR_co], Protocol[O_co, P, CR_co, JR_co]):
+        def __job_wrapped__(
+            _self, self: O_co, *args: P.args, **kwds: P.kwargs
+        ) -> JR_co:
+            ...
+
+        def __call__(_self, self: O_co, *args: P.args, **kwds: P.kwargs) -> CR_co:
+            ...
+
+        @overload
+        def __get__(_self, self: None, cls: type[O_co]) -> Self:
+            ...
+
+        @overload
+        def __get__(_self, self: O_co, cls: type[O_co]) -> JobWrapped[P, CR_co, JR_co]:
+            ...
+
+        def __get__(_self, self: Any, cls: Any) -> Any:
+            ...
+
+    GenJobGeneratorType = Generator[Job[..., Any], None, Job[..., R] | R]
+    GenJobFuncType = (
+        Callable[P, GenJobGeneratorType[R]] | JobWrapped[P, R, GenJobGeneratorType[R]]
+    )
+
+    @overload
+    def generator_job_wrap(
+        wrapped: Method[O, P, GenJobGeneratorType[R]],
+    ) -> JobWrappedMethod[O, P, R, GenJobGeneratorType[R]]:
+        ...
+
+    @overload
+    def generator_job_wrap(
+        wrapped: Callable[P, GenJobGeneratorType[R]],
+    ) -> JobWrapped[P, R, GenJobGeneratorType[R]]:
+        ...
+
+
+def generator_job_wrap(
+    wrapped: Any,
+) -> Any:
+    """装饰一个生成器作业实现的函数, 使其可以直接调用得到结果"""
+
+    @wraps(wrapped)
+    def wrapper(*args, **kwargs):
+        job = GeneratorJob(wrapped, *args, **kwargs)
+        job()
+        if job.err:
+            raise job.err
+        return job.out
+
+    # 使用__job_wrapped__存储用于产生生成器的函数
+    setattr(wrapper, "__job_wrapped__", wrapped)
+
+    return wrapper
