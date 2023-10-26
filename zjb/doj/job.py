@@ -192,12 +192,11 @@ class GeneratorJob(Job[P, R]):
 
 
 if TYPE_CHECKING:
-    from typing import Protocol, Self, overload
+    from typing import Concatenate, Protocol, overload
 
     from .._typings import Method
 
     O = TypeVar("O")
-    O_co = TypeVar("O_co", contravariant=True)
     CR_co = TypeVar("CR_co", covariant=True)
     JR_co = TypeVar("JR_co", covariant=True)
 
@@ -210,21 +209,21 @@ if TYPE_CHECKING:
         def __call__(self, *args: P.args, **kwds: P.kwargs) -> CR_co:
             ...
 
-    class JobWrappedMethod(Method[O_co, P, CR_co], Protocol[O_co, P, CR_co, JR_co]):
-        def __job_wrapped__(
-            _self, self: O_co, *args: P.args, **kwds: P.kwargs
-        ) -> JR_co:
+    class JobWrappedMethod(Method[O, P, CR_co], Protocol[O, P, CR_co, JR_co]):
+        def __job_wrapped__(_self, self: O, *args: P.args, **kwds: P.kwargs) -> JR_co:
             ...
 
-        def __call__(_self, self: O_co, *args: P.args, **kwds: P.kwargs) -> CR_co:
-            ...
-
-        @overload
-        def __get__(_self, self: None, cls: type[O_co]) -> Self:
+        def __call__(_self, self: O, *args: P.args, **kwds: P.kwargs) -> CR_co:
             ...
 
         @overload
-        def __get__(_self, self: O_co, cls: type[O_co]) -> JobWrapped[P, CR_co, JR_co]:
+        def __get__(
+            _self, self: None, cls: type[O]
+        ) -> JobWrapped[Concatenate[O, P], CR_co, JR_co]:
+            ...
+
+        @overload
+        def __get__(_self, self: O, cls: type[O]) -> JobWrapped[P, CR_co, JR_co]:
             ...
 
         def __get__(_self, self: Any, cls: Any) -> Any:
