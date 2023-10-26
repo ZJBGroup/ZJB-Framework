@@ -20,6 +20,9 @@ class Data(HasPrivateTraits, HasRequiredTraits):
     def __init__(self, **traits):
         super().__init__(**traits)
         self._gid = ulid.new()
+        self._update_store_traits()
+
+    def _update_store_traits(self):
         self.store_traits = set(self.trait_names(transient=is_not_true))
 
     @classmethod
@@ -28,7 +31,7 @@ class Data(HasPrivateTraits, HasRequiredTraits):
         HasPrivateTraits.__init__(data)
         data._gid = gid
         data._manager = manager
-        data.store_traits = set(data.trait_names(transient=is_not_true))
+        data._update_store_traits()
         return data
 
     def __setattr__(self, name, value):
@@ -63,8 +66,9 @@ class Data(HasPrivateTraits, HasRequiredTraits):
             self._lock = None
 
     def clone_traits(self, traits=None, memo=None, copy=None, **metadata):
-        cloned = super().clone_traits(traits, memo, copy, **metadata)
+        cloned: Data = super().clone_traits(traits, memo, copy, **metadata)
         cloned._gid = ulid.new()
+        cloned._update_store_traits()
         return cloned
 
     def unbind(self):
