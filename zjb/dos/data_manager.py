@@ -1,7 +1,8 @@
+import io
 import random
 import sys
 from abc import abstractmethod
-from pickle import dumps, loads
+from pickle import Pickler, Unpickler
 from time import sleep
 from typing import Any, Generic, Iterator, NamedTuple, TypeVar
 from weakref import WeakValueDictionary
@@ -57,6 +58,44 @@ class Package(NamedTuple):
 PackageDict = dict[ULID, Package]
 
 
+class _Pickler(Pickler):
+    def __init__(self, manager: "DataManager"):
+        _bytes = io.BytesIO()
+        super().__init__(_bytes)
+        self.bytes = _bytes
+        self.manager = manager
+        # 记录所包含的未管理数据
+        self.unmanagered: dict[ULID, Data] = {}
+
+    def persistent_id(self, obj: Any) -> Any:
+        if not isinstance(obj, Data):
+            return None
+
+        ref = DataRef.from_data(obj)
+
+        # 检查data是否属于其他管理器
+        manager = obj._manager
+        if manager and manager is not self.manager:
+            raise ValueError(
+                f"Can not pack {obj} belongs to {manager} in {self.manager}"
+            )
+
+        # 记录未管理数据
+        if not manager:
+            self.unmanagered[ref.gid] = obj
+
+        return ref
+
+
+class _Unpickler(Unpickler):
+    def __init__(self, bytes, manager: "DataManager"):
+        super().__init__(io.BytesIO(bytes))
+        self.manager = manager
+
+    def persistent_load(self, pid: Any) -> Any:
+        return self.manager._unpack_ref(pid)
+
+
 class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
     """数据管理器,提供统一的数据库接口"""
 
@@ -72,7 +111,7 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
             raise ValueError("data must be unbound")
 
         packages = {}
-        self._pack_data(data, packages)
+        self._dumps(data, packages)
         self._put(packages)
         self._finish(packages)
 
@@ -132,16 +171,17 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         buffer = self._get(key)
         if not buffer:
             raise ValueError("`%s` of %s not in %s" % (name, data, self))
-        return self._unpack(self._loads(buffer))
+        return self._loads(buffer)
 
     def _set_data_trait(self, data: Data, name: str, value):
         """设置数据特征"""
         gid = data._gid
         ref = DataRef.from_data(data)
-        traits: list[TraitItem] = []
-        packages: PackageDict = {gid: Package(ref, data, traits)}
-        package = self._pack(value, packages)
-        traits.append(TraitItem(gid.bytes + name.encode(), self._dumps(package)))
+        packages: PackageDict = {}
+        _bytes = self._dumps(value, packages)
+        packages[gid] = Package(
+            ref, data, [TraitItem(gid.bytes + name.encode(), _bytes)]
+        )
         self._put(packages)
         self._finish(packages)
 
@@ -152,97 +192,35 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
                 self._refs[data._gid] = data
                 data._manager = self
 
-    def _dumps(self, package: Any) -> bytes:
-        """序列化已打包的数据"""
-        return dumps(package)
-
-    def _loads(self, buffer: bytes) -> Any:
-        """反序列化"""
-        return loads(buffer)
-
-    def _pack_data(self, data: Data, packages: PackageDict) -> DataRef:
-        """打包Data"""
-        gid = data._gid
-
-        # 检查packages中是否包含该数据, 避免循环引用导致的无限递归
-        item = packages.get(gid, None)
-        if item:
-            return item.ref
-
-        # 检查data是否属于其他管理器
-        manager = data._manager
-        if manager and manager is not self:
-            raise ValueError(f"Can not pack {data} belongs to {manager} in {self}")
-
-        # 标记data正在打包
-        traits: list[TraitItem] = []
-        ref = DataRef.from_data(data)
-        packages[gid] = Package(ref, data, traits)
-
-        # 递归打包未管理的数据的特征
-        if not manager:
+    def _dumps(self, obj: Any, packages: PackageDict) -> bytes:
+        pickler = _Pickler(self)
+        pickler.dump(obj)
+        res = pickler.bytes.getvalue()
+        for gid, data in pickler.unmanagered.items():
+            if gid in packages:
+                continue
+            packages[gid] = None  # type: ignore
             key_prefix = gid.bytes
-            traits.append(TraitItem(key_prefix, self._dumps(ref.type)))
-            traits += [
+            traits = [TraitItem(key_prefix, self._dumps(type(data), packages))] + [
                 TraitItem(
                     key_prefix + name.encode(),
-                    self._dumps(self._pack(getattr(data, name), packages)),
+                    self._dumps(getattr(data, name), packages),
                 )
                 for name in data.store_traits
             ]
+            packages[gid] = Package(DataRef.from_data(data), data, traits)
+        return res
 
-        return ref
+    def _loads(self, buffer: bytes) -> Any:
+        res = _Unpickler(buffer, self).load()
+        return res
 
-    def _pack(self, obj, packages: PackageDict):
-        """打包数据"""
-        # 数据=>数据引用
-        if isinstance(obj, Data):
-            return self._pack_data(obj, packages)
-
-        # 容器类型
-        if isinstance(obj, tuple):
-            return tuple(self._pack(v, packages) for v in obj)
-        if isinstance(obj, list):
-            return [self._pack(v, packages) for v in obj]
-        if isinstance(obj, dict):
-            return {
-                self._pack(k, packages): self._pack(v, packages) for k, v in obj.items()
-            }
-        if isinstance(obj, set):
-            return {self._pack(v, packages) for v in obj}
-        if isinstance(obj, frozenset):
-            return frozenset(self._pack(v, packages) for v in obj)
-
-        # 其他
-        return obj
-
-    def _unpack_ref(self, ref: DataRef[T]) -> T:
+    def _unpack_ref(self, ref: "DataRef[T]") -> T:
         gid, cls = ref
         data = self._refs.get(gid, None)
         if not data:
             data = self._refs[gid] = cls.from_manager(self, gid)
         return data  # type: ignore
-
-    def _unpack(self, obj):
-        """解包数据"""
-        # 数据引用=>数据
-        if isinstance(obj, DataRef):
-            return self._unpack_ref(obj)
-
-        # 容器类型
-        if isinstance(obj, tuple):
-            return tuple(self._unpack(v) for v in obj)
-        if isinstance(obj, list):
-            return [self._unpack(v) for v in obj]
-        if isinstance(obj, dict):
-            return {self._unpack(k): self._unpack(v) for k, v in obj.items()}
-        if isinstance(obj, set):
-            return {self._unpack(v) for v in obj}
-        if isinstance(obj, frozenset):
-            return frozenset(self._unpack(v) for v in obj)
-
-        # 其他
-        return obj
 
 
 class _Lock(HasPrivateTraits, HasRequiredTraits):
