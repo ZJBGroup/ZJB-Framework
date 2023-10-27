@@ -160,11 +160,12 @@ class GeneratorJob(Job[P, R]):
             if job.state == JobState.ERROR:
                 self.err = JobRuntimeError(job)
                 self.state = JobState.ERROR
+                if self.parent:
+                    self.parent.notify(self)
                 return
-            # 该作业仍在运行时直接返回
-            if self.state != JobState.WAITTING:
-                return
-            self._check_and_done()
+            # 只有在等待状态时才检查是否可以完成
+            if self.state == JobState.WAITTING:
+                self._check_and_done()
 
     def _check_and_done(self):
         """检查作业是否完成并更新状态,
