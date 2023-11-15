@@ -57,3 +57,11 @@ class Line(Data):
 这个例子中, `Point`类具有`x`和`y`两个浮点数属性描述其坐标, `Line`类的两个属性`start`和`end`则是`Point`实例描述其起点坐标与终点坐标.
 
 对于这样两个结构不同且具有关联的类, 直接引用本框架持久化, 能够完全保留数据的结构与关系.
+
+
+License
+---
+
+ZJB-Framework is licensed under [GPL-3.0](LICENSE).
+
+Copyright © 2023 by [Zhejiang Lab](https://www.zhejianglab.com/). All Rights Reserved
