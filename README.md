@@ -58,10 +58,12 @@ class Line(Data):
 
 对于这样两个结构不同且具有关联的类, 直接引用本框架持久化, 能够完全保留数据的结构与关系.
 
+致谢
+---
+感谢之江实验室人工智能研究院混合增强智能研究中心、中国科学院自动化研究所对本项目的大力支持！
 
 License
 ---
-
 ZJB-Framework is licensed under [GPL-3.0](LICENSE).
 
 Copyright © 2023 by [Zhejiang Lab](https://www.zhejianglab.com/). All Rights Reserved
