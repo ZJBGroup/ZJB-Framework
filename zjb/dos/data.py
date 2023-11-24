@@ -71,6 +71,13 @@ class Data(HasPrivateTraits, HasRequiredTraits):
         cloned._update_store_traits()
         return cloned
 
+    def __deepcopy__(self, memo: dict):
+        return self.clone_traits(
+            memo=memo,
+            traits=memo.get("traits_to_copy"),
+            copy=memo.get("traits_copy_mode", "deep"),
+        )
+
     def unbind(self):
         if self._manager:
             self._manager.unbind(self)

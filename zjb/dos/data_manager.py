@@ -5,7 +5,7 @@ from abc import abstractmethod
 from pickle import Pickler, Unpickler
 from time import sleep
 from typing import Any, Generic, Iterator, NamedTuple, TypeVar
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, ref
 
 from traits.has_traits import (
     ABCMetaHasTraits,
@@ -14,6 +14,9 @@ from traits.has_traits import (
     Property,
     cached_property,
 )
+from traits.trait_dict_object import TraitDictObject
+from traits.trait_list_object import TraitListObject
+from traits.trait_set_object import TraitSetObject
 from traits.trait_types import Bool, Bytes, Dict, Str
 from ulid import ULID
 
@@ -171,7 +174,13 @@ class DataManager(HasPrivateTraits, metaclass=ABCMetaHasTraits):
         buffer = self._get(key)
         if not buffer:
             raise ValueError("`%s` of %s not in %s" % (name, data, self))
-        return self._loads(buffer)
+        value = self._loads(buffer)
+        if isinstance(value, (TraitListObject, TraitDictObject, TraitSetObject)):
+            value.__dict__ |= {
+                "object": ref(data),
+                "trait": data.trait(name).handler,
+            }
+        return value
 
     def _set_data_trait(self, data: Data, name: str, value):
         """设置数据特征"""
